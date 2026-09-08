@@ -37,7 +37,6 @@
     label { font-size: 11px; color: #56b4e9; display: block; margin-bottom: 4px; }
     input[type=range] { width: 100%; }
 
-    /* Estilos para la leyenda con paleta accesible para daltonismo */
     .legend {
       margin-top: 12px;
       padding-top: 10px;
@@ -70,7 +69,6 @@
     <h1>Red Global del Vino (2023)</h1>
     <p>Gira con clic | <b>Zoom con la rueda</b></p>
     
-    <!-- Leyenda apta para daltonismo -->
     <div class="legend">
       <div style="font-weight: 600; margin-bottom: 6px; color: #e2e8f0;">Rol Comercial (Paleta Accesible):</div>
       <div class="legend-item">
@@ -87,7 +85,6 @@
       </div>
     </div>
 
-    <!-- Filtro de flujos -->
     <div class="control-group">
       <label for="filter-range">Filtrar flujos menores a: <span id="filter-val">100</span> tons</label>
       <input type="range" id="filter-range" min="100" max="50000" step="500" value="100">
@@ -138,11 +135,9 @@
         .attr("class", "land")
         .attr("d", path);
 
-      // --- CÁLCULO DE BALANCE COMERCIAL ---
       const nodeBalances = new Map();
       edges.forEach(e => {
         const weight = +e.Weight;
-        
         if (!nodeBalances.has(e.Source)) nodeBalances.set(e.Source, { out: 0, in: 0 });
         nodeBalances.get(e.Source).out += weight;
 
@@ -150,19 +145,18 @@
         nodeBalances.get(e.Target).in += weight;
       });
 
-      // Mapeo con paleta Okabe-Ito (Accesible)
       const nodesMap = new Map();
       nodes.forEach(d => {
         const balance = nodeBalances.get(d.id) || { out: 0, in: 0 };
         const total = balance.out + balance.in;
         
-        let nodeColor = "#999999"; // Gris (Mixto / Hub)
+        let nodeColor = "#999999";
         if (total > 0) {
           const exportRatio = balance.out / total;
           if (exportRatio > 0.65) {
-            nodeColor = "#0072B2"; // Azul Ultramar (Exportador Neto)
+            nodeColor = "#0072B2";
           } else if (exportRatio < 0.35) {
-            nodeColor = "#E69F00"; // Naranja Ámbar (Importador Neto)
+            nodeColor = "#E69F00";
           }
         }
 
@@ -198,15 +192,12 @@
       let flowArcs = getFilteredArcs();
       const maxWeight = d3.max(edges, d => +d.Weight);
       const strokeScale = d3.scalePow().exponent(0.5).domain([100, maxWeight]).range([0.8, 4.5]);
-      
-      // Escala de color para los arcos utilizando una rampa segura (Plasma/Viridis abreviada)
       const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([0, maxWeight]);
 
       function render() {
         sphere.attr("r", projection.scale());
         mapGroup.selectAll("path.land").attr("d", path);
 
-        // Arcos
         arcsGroup.selectAll("path.arc")
           .data(flowArcs, d => d.source.id + "-" + d.target.id)
           .join("path")
@@ -219,7 +210,6 @@
             return d3.geoDistance([d.source.lng, d.source.lat], center) > Math.PI / 2 ? "none" : "inline";
           });
 
-        // Nodos
         nodesGroup.selectAll("g.node-group")
           .data(Array.from(nodesMap.values()).filter(d => !isNaN(d.lng)))
           .join("g")
@@ -240,7 +230,6 @@
 
       render();
 
-      // Drag & Zoom
       const drag = d3.drag().on("drag", (event) => {
         const rotate = projection.rotate();
         const k = 75 / projection.scale();
@@ -257,7 +246,6 @@
 
       svg.call(drag).call(zoom);
 
-      // Slider
       d3.select("#filter-range").on("input", function() {
         minThreshold = +this.value;
         d3.select("#filter-val").text(minThreshold);
@@ -265,12 +253,10 @@
         render();
       });
 
-      // Partículas animadas
-  // Animación suave basada en tiempo real
-      const duration = 6000; // Duración en milisegundos (6 segundos por trayecto)
+      // Animación con tiempo pausado (6 segundos por recorrido)
+      const duration = 6000;
 
       d3.timer((elapsed) => {
-        // Calcula el progreso global (0.0 a 1.0) según el tiempo transcurrido
         const progress = (elapsed % duration) / duration;
 
         particlesGroup.selectAll("circle.pulse-particle")
@@ -279,7 +265,6 @@
           .attr("class", "pulse-particle")
           .attr("r", d => strokeScale(d.weight) / 2 + 0.8)
           .attr("transform", d => {
-            // Se añade un desfase por arco según d.weight o índice para que no salgan todas sincronizadas
             const offset = (d.weight * 0.0001) % 1;
             const particleProgress = (progress + offset) % 1;
 
@@ -297,6 +282,8 @@
             return dist > Math.PI / 2 ? "none" : "inline";
           });
       });
+
+    }).catch(err => console.error("Error al cargar los datos:", err));
   </script>
 </body>
 </html>
