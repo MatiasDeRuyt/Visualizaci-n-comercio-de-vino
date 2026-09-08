@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Red Global del Comercio de Vino 2023</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson-client@3"></script>
+  <style>
+    body {
+      margin: 0;
+      background-color: #0b0e14;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      overflow: hidden;
+    }
+    #title-panel {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.88);
+      padding: 18px 24px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+      z-index: 10;
+      max-width: 320px;
+    }
+    h1 { margin: 0 0 6px 0; font-size: 18px; color: #f8fafc; font-weight: 600; }
+    p { margin: 0; font-size: 12px; color: #94a3b8; }
+    
+    .control-group {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    label { font-size: 11px; color: #56b4e9; display: block; margin-bottom: 4px; }
+    input[type=range] { width: 100%; }
+
+    .legend {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 11px;
+    }
+    .legend-item { display: flex; align-items: center; margin-bottom: 6px; }
+    .legend-color { 
+      width: 14px; 
+      height: 14px; 
+      border-radius: 50%; 
+      margin-right: 8px;
+      border: 1.5px solid #ffffff;
+    }
+
+    svg { width: 100vw; height: 100vh; cursor: grab; }
+    svg:active { cursor: grabbing; }
+
+    .sphere { fill: #020617; stroke: #1e293b; stroke-width: 1.5px; }
+    .land { fill: #1e293b; stroke: #334155; stroke-width: 0.5px; }
+    .arc { fill: none; stroke-linecap: round; opacity: 0.45; }
+    .pulse-particle { fill: #ffffff; }
+    .node { stroke: #ffffff; stroke-width: 1.5px; }
+    .node-label { font-size: 10px; fill: #f8fafc; font-weight: bold; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div id="title-panel">
+    <h1>Red Global del Vino (2023)</h1>
+    <p>Gira con clic | <b>Zoom con la rueda</b></p>
+    
+    <div class="legend">
+      <div style="font-weight: 600; margin-bottom: 6px; color: #e2e8f0;">Rol Comercial (Paleta Accesible):</div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #0072B2;"></div>
+        <span><b>Exportador Top</b> (Salida &gt; Entrada)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #E69F00;"></div>
+        <span><b>Importador Top</b> (Entrada &gt; Salida)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background-color: #999999;"></div>
+        <span><b>Comercio Mixto / Hub</b></span>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label for="filter-range">Filtrar flujos menores a: <span id="filter-val">100</span> tons</label>
+      <input type="range" id="filter-range" min="100" max="50000" step="500" value="100">
+    </div>
+  </div>
+
+  <svg id="globe"></svg>
+
+  <script>
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    const svg = d3.select("#globe")
+      .attr("width", width)
+      .attr("height", height);
+
+    let initialScale = Math.min(width, height) / 2.3;
+
+    const projection = d3.geoOrthographic()
+      .scale(initialScale)
+      .translate([width / 2, height / 2])
+      .clipAngle(90);
+
+    const path = d3.geoPath().projection(projection);
+
+    const mapGroup = svg.append("g");
+    const arcsGroup = svg.append("g");
+    const particlesGroup = svg.append("g");
+    const nodesGroup = svg.append("g");
+
+    const sphere = mapGroup.append("circle")
+      .attr("class", "sphere")
+      .attr("cx", width / 2)
+      .attr("cy", height / 2)
+      .attr("r", projection.scale());
+
+    Promise.all([
+      d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"),
+      d3.csv("nodes_vino_2023_geo.csv"),
+      d3.csv("edges_vino_2023.csv")
+    ]).then(([world, nodes, edges]) => {
+
+      const countries = topojson.feature(world, world.objects.countries);
+      mapGroup.selectAll("path.land")
+        .data(countries.features)
+        .enter()
+        .append("path")
+        .attr("class", "land")
+        .attr("d", path);
+
+      const nodeBalances = new Map();
+      edges.forEach(e => {
+        const weight = +e.Weight;
+        if (!nodeBalances.has(e.Source)) nodeBalances.set(e.Source, { out: 0, in: 0 });
+        nodeBalances.get(e.Source).out += weight;
+
+        if (!nodeBalances.has(e.Target)) nodeBalances.set(e.Target, { out: 0, in: 0 });
+        nodeBalances.get(e.Target).in += weight;
+      });
+
+      const nodesMap = new Map();
+      nodes.forEach(d => {
+        const balance = nodeBalances.get(d.id) || { out: 0, in: 0 };
+        const total = balance.out + balance.in;
+        
+        let nodeColor = "#999999";
+        if (total > 0) {
+          const exportRatio = balance.out / total;
+          if (exportRatio > 0.65) {
+            nodeColor = "#0072B2";
+          } else if (exportRatio < 0.35) {
+            nodeColor = "#E69F00";
+          }
+        }
+
+        nodesMap.set(d.id, {
+          id: d.id, 
+          lat: +d.lat, 
+          lng: +d.lng, 
+          degree_out: +d.degree_out,
+          color: nodeColor,
+          balance: balance
+        });
+      });
+
+      let minThreshold = 100;
+
+      function getFilteredArcs() {
+        return edges.map(d => {
+          const source = nodesMap.get(d.Source);
+          const target = nodesMap.get(d.Target);
+          if (source && target && !isNaN(source.lat) && !isNaN(target.lat) && +d.Weight >= minThreshold) {
+            return {
+              source, target, weight: +d.Weight,
+              feature: {
+                type: "Feature",
+                geometry: { type: "LineString", coordinates: [[source.lng, source.lat], [target.lng, target.lat]] }
+              }
+            };
+          }
+          return null;
+        }).filter(d => d !== null);
+      }
+
+      let flowArcs = getFilteredArcs();
+      const maxWeight = d3.max(edges, d => +d.Weight);
+      const strokeScale = d3.scalePow().exponent(0.5).domain([100, maxWeight]).range([0.8, 4.5]);
+      const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([0, maxWeight]);
+
+      function render() {
+        sphere.attr("r", projection.scale());
+        mapGroup.selectAll("path.land").attr("d", path);
+
+        arcsGroup.selectAll("path.arc")
+          .data(flowArcs, d => d.source.id + "-" + d.target.id)
+          .join("path")
+          .attr("class", "arc")
+          .attr("d", d => path(d.feature))
+          .attr("stroke", d => colorScale(d.weight))
+          .attr("stroke-width", d => strokeScale(d.weight))
+          .style("display", d => {
+            const center = projection.invert([width / 2, height / 2]);
+            return d3.geoDistance([d.source.lng, d.source.lat], center) > Math.PI / 2 ? "none" : "inline";
+          });
+
+        nodesGroup.selectAll("g.node-group")
+          .data(Array.from(nodesMap.values()).filter(d => !isNaN(d.lng)))
+          .join("g")
+          .attr("class", "node-group")
+          .attr("transform", d => {
+            const coord = projection([d.lng, d.lat]);
+            return coord ? `translate(${coord[0]},${coord[1]})` : "translate(-100,-100)";
+          })
+          .style("display", d => {
+            const center = projection.invert([width / 2, height / 2]);
+            return d3.geoDistance([d.lng, d.lat], center) > Math.PI / 2 ? "none" : "inline";
+          })
+          .html(d => `
+            <circle class="node" fill="${d.color}" r="${Math.max(3.5, Math.sqrt(d.degree_out) * (projection.scale() / initialScale))}"></circle>
+            <text class="node-label" dx="8" dy="3">${d.id}</text>
+          `);
+      }
+
+      render();
+
+      const drag = d3.drag().on("drag", (event) => {
+        const rotate = projection.rotate();
+        const k = 75 / projection.scale();
+        projection.rotate([rotate[0] + event.dx * k, rotate[1] - event.dy * k]);
+        render();
+      });
+
+      const zoom = d3.zoom()
+        .scaleExtent([0.8, 8])
+        .on("zoom", (event) => {
+          projection.scale(initialScale * event.transform.k);
+          render();
+        });
+
+      svg.call(drag).call(zoom);
+
+      d3.select("#filter-range").on("input", function() {
+        minThreshold = +this.value;
+        d3.select("#filter-val").text(minThreshold);
+        flowArcs = getFilteredArcs();
+        render();
+      });
+
+      // Animación con tiempo pausado (6 segundos por recorrido)
+      const duration = 6000;
+
+      d3.timer((elapsed) => {
+        const progress = (elapsed % duration) / duration;
+
+        particlesGroup.selectAll("circle.pulse-particle")
+          .data(flowArcs, d => d.source.id + "-" + d.target.id)
+          .join("circle")
+          .attr("class", "pulse-particle")
+          .attr("r", d => strokeScale(d.weight) / 2 + 0.8)
+          .attr("transform", d => {
+            const offset = (d.weight * 0.0001) % 1;
+            const particleProgress = (progress + offset) % 1;
+
+            const interpolate = d3.geoInterpolate([d.source.lng, d.source.lat], [d.target.lng, d.target.lat]);
+            const coord = projection(interpolate(particleProgress));
+            return coord ? `translate(${coord[0]},${coord[1]})` : "translate(-100,-100)";
+          })
+          .style("display", d => {
+            const offset = (d.weight * 0.0001) % 1;
+            const particleProgress = (progress + offset) % 1;
+            
+            const center = projection.invert([width / 2, height / 2]);
+            const interpolate = d3.geoInterpolate([d.source.lng, d.source.lat], [d.target.lng, d.target.lat]);
+            const dist = d3.geoDistance(interpolate(particleProgress), center);
+            return dist > Math.PI / 2 ? "none" : "inline";
+          });
+      });
+
+    }).catch(err => console.error("Error al cargar los datos:", err));
+  </script>
+</body>
+</html>
