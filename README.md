@@ -1,2 +1,2 @@
-# Visualizaci-n-comercio-de-vino
+# Visualizacion-comercio-de-vino
 Desafío semanal curso Redes Sociales
