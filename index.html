@@ -266,10 +266,12 @@
       });
 
       // Partículas animadas
-      let timer = 0;
-      d3.timer(() => {
-        timer = (timer + 1) % 100;
-        const progress = timer / 100;
+  // Animación suave basada en tiempo real
+      const duration = 6000; // Duración en milisegundos (6 segundos por trayecto)
+
+      d3.timer((elapsed) => {
+        // Calcula el progreso global (0.0 a 1.0) según el tiempo transcurrido
+        const progress = (elapsed % duration) / duration;
 
         particlesGroup.selectAll("circle.pulse-particle")
           .data(flowArcs, d => d.source.id + "-" + d.target.id)
@@ -277,19 +279,24 @@
           .attr("class", "pulse-particle")
           .attr("r", d => strokeScale(d.weight) / 2 + 0.8)
           .attr("transform", d => {
+            // Se añade un desfase por arco según d.weight o índice para que no salgan todas sincronizadas
+            const offset = (d.weight * 0.0001) % 1;
+            const particleProgress = (progress + offset) % 1;
+
             const interpolate = d3.geoInterpolate([d.source.lng, d.source.lat], [d.target.lng, d.target.lat]);
-            const coord = projection(interpolate(progress));
+            const coord = projection(interpolate(particleProgress));
             return coord ? `translate(${coord[0]},${coord[1]})` : "translate(-100,-100)";
           })
           .style("display", d => {
+            const offset = (d.weight * 0.0001) % 1;
+            const particleProgress = (progress + offset) % 1;
+            
             const center = projection.invert([width / 2, height / 2]);
             const interpolate = d3.geoInterpolate([d.source.lng, d.source.lat], [d.target.lng, d.target.lat]);
-            const dist = d3.geoDistance(interpolate(progress), center);
+            const dist = d3.geoDistance(interpolate(particleProgress), center);
             return dist > Math.PI / 2 ? "none" : "inline";
           });
       });
-
-    });
   </script>
 </body>
 </html>
